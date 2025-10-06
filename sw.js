@@ -1,5 +1,5 @@
-// sw.js — caché básico + (luego) handler de push
-const CACHE = 'andon-v2';
+// sw.js — caché básico + handler de push
+const CACHE = 'andon-v3';   // ← súbelo para forzar update
 const ASSETS = [
   './',
   './index.html',
@@ -7,11 +7,26 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
+
+// ---- OFFLINE ----
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+});
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
+});
+self.addEventListener('fetch', (e) => {
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+});
+
 // --- Firebase Messaging en background (compat) ---
 importScripts('https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.3/firebase-messaging-compat.js');
 
-// Misma configuración que en index.html
 firebase.initializeApp({
   apiKey: "AIzaSyDSLfHxH1FaNEDOb9l-gb2Ocches1VG6fA",
   authDomain: "perritas-andon.firebaseapp.com",
@@ -24,26 +39,31 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Cuando llega un push con la app cerrada o en 2º plano
+// Log para depurar en la consola del SW (Application → Service Workers → "Open DevTools")
 messaging.onBackgroundMessage((payload) => {
-  // Intenta usar primero notification del payload (Composer la manda)
-  const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'Andon Perritas';
-  const body  = (payload.notification && payload.notification.body)  || (payload.data && payload.data.body)  || '';
-  const icon  = (payload.notification && payload.notification.icon)  || '/perritas-andon/icons/icon-192.png';
-  const badge = '/perritas-andon/icons/icon-192.png';
+  console.log('[sw] onBackgroundMessage', payload);
+
+  const title = (payload.notification && payload.notification.title)
+             || (payload.data && payload.data.title)
+             || 'Andon Perritas';
+  const body  = (payload.notification && payload.notification.body)
+             || (payload.data && payload.data.body)
+             || '';
+  const icon  = (payload.notification && payload.notification.icon)
+             || './icons/icon-192.png';
+  const badge = './icons/icon-192.png';
 
   self.registration.showNotification(title, {
     body,
     icon,
     badge,
     vibrate: [200, 100, 200],
-    tag: 'andon',       // si llega otra con el mismo tag, vuelve a notificar (renotify)
+    tag: 'andon',
     renotify: true,
     data: payload.data || {}
   });
 });
 
-// Opcional: al tocar la notificación, abrir/enfocar la app
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = 'https://arthurpacks123.github.io/perritas-andon/';
@@ -56,4 +76,3 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
-
