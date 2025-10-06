@@ -1,5 +1,5 @@
 // sw.js — caché básico + handler de push
-const CACHE = 'andon-v3';   // ← súbelo para forzar update
+const CACHE = 'andon-v4';   // ← súbelo para forzar update
 const ASSETS = [
   './',
   './index.html',
