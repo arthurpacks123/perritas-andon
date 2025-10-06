@@ -13,12 +13,14 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
-
-// Cuando llega un push en segundo plano:
 messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(
     payload.notification?.title || 'Andon Perritas',
-    { body: payload.notification?.body || 'Tarea pendiente' }
+    {
+      body: payload.notification?.body || 'Recordatorio',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/badge-72.png'
+    }
   );
 });
 
