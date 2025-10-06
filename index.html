@@ -17,6 +17,15 @@
   small{color:#666}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 </style>
+  <link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1967d2" />
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js', { scope: './' })
+    .then(()=>console.log('SW listo'));
+}
+</script>
+
 </head>
 <body>
   <h1>Andon Perritas</h1>
@@ -103,8 +112,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore-compat.js"></script>
-  <script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-messaging-compat.js"></script>
 
+  <script>
 
   // 1) Pega tu configuración de Firebase aquí ↓↓↓
  const firebaseConfig = {
@@ -438,4 +448,5 @@ async function done(k){
 
 </body>
 </html>
+
 
