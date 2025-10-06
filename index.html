@@ -365,6 +365,7 @@ document.addEventListener('visibilitychange', () => {
 
 // al cargar
 window.addEventListener('load', scheduleMidnightReset);
+await registerPush();
 
 </script>
 
@@ -452,7 +453,7 @@ if ('Notification' in window) {
   navigator.serviceWorker.ready.then(async (reg) => {
     try {
       const token = await messaging.getToken({
-        vapidKey: 'TU_VAPID_PUBLIC_KEY',
+        vapidKey: 'BPbzJpP4hobfko8Pv5y9Duho8U6a_Diq-O4j-UGx_9qR_JNU7VlJW5n63Ixo-5ceS_wpmKv953F_OmMSMQvsFcM',
         serviceWorkerRegistration: reg
       });
       if (token && home && username) {
@@ -473,6 +474,7 @@ if ('Notification' in window) {
 
 </body>
 </html>
+
 
 
 
