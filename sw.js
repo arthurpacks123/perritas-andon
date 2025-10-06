@@ -25,7 +25,7 @@ messaging.onBackgroundMessage((payload) => {
 });
 
 // sw.js — caché básico + (luego) handler de push
-const CACHE = 'andon-v1';
+const CACHE = 'andon-v2';
 const ASSETS = [
   './',
   './index.html',
