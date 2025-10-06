@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Andon Perritas</title>
+<title>Andon Perritas – Multiusuario</title>
 <style>
   body{font-family:system-ui,Arial,sans-serif;margin:24px;max-width:720px}
   h1{margin:0 0 6px}
@@ -130,14 +130,14 @@ if ('serviceWorker' in navigator) {
   const auth = firebase.auth();
   const db = firebase.firestore();
 
-  // --- Fecha ISO (DEFINIDA ANTES DE USAR docRef) ---
+  // --- Fecha ISO (DEFINIR antes de usar docRef) ---
   function hoyISO(){
     const d = new Date();
     const mm = String(d.getMonth()+1).padStart(2,'0');
     const dd = String(d.getDate()).padStart(2,'0');
     return `${d.getFullYear()}-${mm}-${dd}`;
   }
-  window.hoyStr = hoyISO();                                      // <- global
+  window.hoyStr = hoyISO(); // global
   document.getElementById('hoy').textContent = new Date().toLocaleDateString();
 
   // --- Estado local ---
@@ -150,9 +150,10 @@ if ('serviceWorker' in navigator) {
     .then(()=>console.log('Auth OK'))
     .catch(e => { console.error(e); alert('Error de autenticación: '+e.message); });
 
-  // --- Refs Firestore (una sola vez) ---
+  // --- Refs Firestore ---
   function docRef(){
-    return db.collection('andonHomes').doc(home).collection('days').doc(window.hoyStr);
+    const id = window.hoyStr || hoyISO();
+    return db.collection('andonHomes').doc(home).collection('days').doc(id);
   }
   function prefsRef(){
     return db.collection('andonHomes').doc(home).collection('meta').doc('prefs');
@@ -221,7 +222,6 @@ if ('serviceWorker' in navigator) {
     unsubDoc = docRef().onSnapshot(snap=>{
       if(snap.exists) pinta(snap.data());
     });
-    // Cargar y pintar horarios
     prefsRef().get().then(p=>{
       const data = p.data()||{};
       document.getElementById('t-am').textContent = data.am||'07:30';
@@ -328,7 +328,7 @@ if ('serviceWorker' in navigator) {
   function scheduleMidnightReset(){
     const now = new Date();
     const next = new Date(now);
-    next.setHours(24, 0, 5, 0);                       // 00:00:05
+    next.setHours(24, 0, 5, 0);
     const ms = next - now;
     setTimeout(() => { switchToNewDay(); scheduleMidnightReset(); }, ms);
   }
@@ -346,7 +346,7 @@ if ('serviceWorker' in navigator) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) switchToNewDay(); });
   window.addEventListener('load', scheduleMidnightReset);
 
-  // --- Registrar push SOLO tras Entrar ---
+  // --- Push: registrar SOLO tras Entrar ---
   async function registerPush(){
     if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
     let perm = Notification.permission;
@@ -370,7 +370,7 @@ if ('serviceWorker' in navigator) {
     }catch(e){ console.log('Error FCM token', e); }
   }
 
-  // --- Prefill localStorage al cargar ---
+  // Prefill localStorage
   window.addEventListener('load', ()=>{
     const h = localStorage.getItem('andon_home');
     const u = localStorage.getItem('andon_user');
@@ -380,7 +380,7 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  // --- Handler Entrar (con registerPush al final) ---
+  // Handler Entrar
   document.getElementById('btnJoin').onclick = async ()=>{
     home = document.getElementById('homeId').value.trim();
     username = document.getElementById('username').value.trim();
@@ -392,7 +392,7 @@ if ('serviceWorker' in navigator) {
     await ensureDoc();
     subscribeState();
     subscribeFeed();
-    await registerPush();     // << aquí sí
+    await registerPush();  // <-- aquí sí
   };
 
   // Valores por defecto visibles al cargar
@@ -402,8 +402,3 @@ if ('serviceWorker' in navigator) {
   </script>
 </body>
 </html>
-
-
-
-
-
