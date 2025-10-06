@@ -1,3 +1,27 @@
+// IMPORTS PARA FCM (compat)
+importScripts('https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.3/firebase-messaging-compat.js');
+
+// Pega tu mismo firebaseConfig:
+firebase.initializeApp({
+  apiKey: "AIzaSyDSLfHxH1FaNEDOb9l-gb2Ocches1VG6fA",
+  authDomain: "perritas-andon.firebaseapp.com",
+  projectId: "perritas-andon",
+  storageBucket: "perritas-andon.firebasestorage.app",
+  messagingSenderId: "202024461735",
+  appId: "1:202024461735:web:8342da996a90bf2850c282"
+});
+
+const messaging = firebase.messaging();
+
+// Cuando llega un push en segundo plano:
+messaging.onBackgroundMessage((payload) => {
+  self.registration.showNotification(
+    payload.notification?.title || 'Andon Perritas',
+    { body: payload.notification?.body || 'Tarea pendiente' }
+  );
+});
+
 // sw.js — caché básico + (luego) handler de push
 const CACHE = 'andon-v1';
 const ASSETS = [
