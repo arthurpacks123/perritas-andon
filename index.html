@@ -325,6 +325,37 @@ function hoyISO(){
 let hoyStr = hoyISO();
 document.getElementById('hoy').textContent = new Date().toLocaleDateString();
 
+  // ----- AUTO-RESET A MEDIANOCHE -----
+function scheduleMidnightReset(){
+  const now = new Date();
+  const next = new Date(now);
+  // próximo día 00:00:05 (5s de tolerancia)
+  next.setHours(24, 0, 5, 0);
+  const ms = next - now;
+  setTimeout(() => { switchToNewDay(); scheduleMidnightReset(); }, ms);
+}
+
+async function switchToNewDay(){
+  // Si cambió el día, pasamos a un doc nuevo
+  const today = hoyISO();
+  if (today !== hoyStr) {
+    hoyStr = today;
+    if (unsubDoc) unsubDoc();          // corta listener viejo
+    await ensureDoc();                  // crea doc del día si no existe
+    subscribeState();                   // se vuelve a suscribir al nuevo doc
+    programarAlertas();                 // reprograma alertas del día
+    console.log('Día cambiado a', hoyStr);
+  }
+}
+
+// Al volver a la pestaña, verifica cambio de día
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) switchToNewDay();
+});
+
+// al cargar
+window.addEventListener('load', scheduleMidnightReset);
+
 </script>
 
 <script>
@@ -407,3 +438,4 @@ async function done(k){
 
 </body>
 </html>
+
