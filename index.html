@@ -444,9 +444,35 @@ async function done(k){
   }
 }
 </script>
+  
+<script>
+let messaging;
+if ('Notification' in window) {
+  messaging = firebase.messaging();
+  navigator.serviceWorker.ready.then(async (reg) => {
+    try {
+      const token = await messaging.getToken({
+        vapidKey: 'TU_VAPID_PUBLIC_KEY',
+        serviceWorkerRegistration: reg
+      });
+      if (token && home && username) {
+        // guarda token por hogar/usuario
+        await db.collection('andonHomes').doc(home)
+          .collection('meta').doc('tokens')
+          .collection('all').doc(token)
+          .set({ user: username, ts: firebase.firestore.FieldValue.serverTimestamp() });
+        console.log('FCM token ok');
+      }
+    } catch (e) {
+      console.log('Error FCM token', e);
+    }
+  });
+}
+</script>
 
 
 </body>
 </html>
+
 
 
