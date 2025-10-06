@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Andon Perritas – Multiusuario</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;margin:24px;max-width:720px}
+  h1{margin:0 0 6px}
+  .row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+  .card{border:1px solid #ddd;border-radius:14px;padding:14px 16px;margin:12px 0}
+  .pill{padding:6px 10px;border-radius:999px;font-size:12px}
+  .ok{background:#e8fff0;border:1px solid #bfe7cc}
+  .pending{background:#fff7e6;border:1px solid #f5d49b}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #ccc;background:#fafafa;cursor:pointer}
+  button.primary{background:#1967d2;color:#fff;border:none}
+  small{color:#666}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+</style>
+</head>
+<body>
+  <h1>Andon Perritas</h1>
+  <p><small>Hoy: <span id="hoy"></span></small></p>
+
+  <div class="card">
+    <strong>Identificación</strong>
+    <div class="grid2">
+      <label>Código de hogar
+        <input id="homeId" placeholder="micasa">
+      </label>
+      <label>Tu nombre
+        <input id="username" placeholder="Usuario">
+      </label>
+    </div>
+    <div style="margin-top:10px">
+      <button class="primary" id="btnJoin">Entrar</button>
+      <small id="joinMsg"></small>
+    </div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card">
+      <div class="row">
+        <div><strong>Comida AM</strong> <span id="s-am" class="pill pending">Pendiente</span></div>
+        <div>
+          <button onclick="done('am')">Marcar hecho</button>
+          <button onclick="posponer('am')">Posponer 10 min</button>
+        </div>
+      </div>
+      <small>Hora objetivo: <span id="t-am"></span></small>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><strong>Paseo</strong> <span id="s-walk" class="pill pending">Pendiente</span></div>
+        <div>
+          <button onclick="done('walk')">Marcar hecho</button>
+          <button onclick="posponer('walk')">Posponer 30 min</button>
+        </div>
+      </div>
+      <small>Ventana sugerida: <span id="t-walk"></span></small>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><strong>Juego 15 min</strong> <span id="s-play" class="pill pending">Pendiente</span></div>
+        <div>
+          <button onclick="playTimer()">Iniciar 15 min</button>
+          <button onclick="done('play')">Marcar hecho</button>
+        </div>
+      </div>
+      <small>Tip: su juguete favorito 🙂</small>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><strong>Comida PM</strong> <span id="s-pm" class="pill pending">Pendiente</span></div>
+        <div>
+          <button onclick="done('pm')">Marcar hecho</button>
+          <button onclick="posponer('pm')">Posponer 10 min</button>
+        </div>
+      </div>
+      <small>Hora objetivo: <span id="t-pm"></span></small>
+    </div>
+
+    <div class="card">
+      <strong>Preferencias (guardadas en la nube para el hogar)</strong><br>
+      <label>Comida AM: <input type="time" id="in-am" value="07:30"></label><br>
+      <label>Paseo (hora alerta): <input type="time" id="in-walk" value="19:00"></label><br>
+      <label>Comida PM: <input type="time" id="in-pm" value="20:30"></label><br><br>
+      <button class="primary" onclick="guardarHorarios()">Guardar horarios</button>
+      <button onclick="reiniciarDia()">Reiniciar día</button>
+      <div><small id="log"></small></div>
+    </div>
+
+    <div class="card">
+      <strong>Actividad reciente</strong>
+      <ul id="feed"></ul>
+    </div>
+  </div>
+
+  <!-- Firebase SDKs (compat para simplicidad) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore-compat.js"></script>
+  <script>
+
+
+  // 1) Pega tu configuración de Firebase aquí ↓↓↓
+ const firebaseConfig = {
+  apiKey: "AIzaSyDSLfHxH1FaNEDOb9l-gb2Ocches1VG6fA",
+  authDomain: "perritas-andon.firebaseapp.com",
+  projectId: "perritas-andon",
+  storageBucket: "perritas-andon.firebasestorage.app",
+  messagingSenderId: "202024461735",
+  appId: "1:202024461735:web:8342da996a90bf2850c282",
+  measurementId: "G-8L9B0HQLVW"
+};
+  // ↑↑↑ Reemplaza con el objeto de configuración de tu proyecto
+
+  // Inicializar
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // Estado local
+  const OBJTXT = {am:'Comida AM', walk:'Paseo', play:'Juego 15 min', pm:'Comida PM'};
+
+  let uid = null;
+  let home = null;
+  let username = null;
+  let unsubDoc = null;
+  let unsubFeed = null;
+
+  // Autenticación anónima
+  auth.signInAnonymously()
+  .then(()=>console.log('Auth OK'))
+  .catch(e => { console.error(e); alert('Error de autenticación: '+e.message); });
+
+
+  // UI join
+  document.getElementById('btnJoin').onclick = async ()=>{
+    home = document.getElementById('homeId').value.trim();
+    username = document.getElementById('username').value.trim();
+    if(!home || !username){ msg('joinMsg','Completa hogar y nombre'); return; }
+    localStorage.setItem('andon_home', home);
+    localStorage.setItem('andon_user', username);
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('joinMsg').textContent = `Conectado al hogar: ${home}`;
+    await ensureDoc();
+    subscribeState();
+    subscribeFeed();
+  };
+
+  // Cargar si ya había datos
+  window.addEventListener('load', ()=>{
+    const h = localStorage.getItem('andon_home');
+    const u = localStorage.getItem('andon_user');
+    if(h && u){
+      document.getElementById('homeId').value = h;
+      document.getElementById('username').value = u;
+    }
+  });
+
+  // Documento por hogar y día
+  function docRef(){
+    return db.collection('andonHomes').doc(home).collection('days').doc(hoyStr);
+  }
+  function prefsRef(){
+    return db.collection('andonHomes').doc(home).collection('meta').doc('prefs');
+  }
+  function feedRef(){
+    return db.collection('andonHomes').doc(home).collection('feed');
+  }
+
+  async function ensureDoc(){
+    const d = await docRef().get();
+    if(!d.exists){
+      await docRef().set({
+        am:false, walk:false, play:false, pm:false,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    const p = await prefsRef().get();
+    if(!p.exists){
+      await prefsRef().set({am:'07:30', walk:'19:00', pm:'20:30'});
+    }
+  }
+
+  function pinta(data){
+    setPill('s-am', data.am);
+    setPill('s-walk', data.walk);
+    setPill('s-play', data.play);
+    setPill('s-pm', data.pm);
+  }
+  function setPill(id, done){
+    const el = document.getElementById(id);
+    el.className = 'pill ' + (done?'ok':'pending');
+    el.textContent = done?'Hecho':'Pendiente';
+  }
+
+  function msg(id, t){ document.getElementById(id).textContent = t; }
+  function beep(){
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value=880; g.gain.value=0.05; o.start();
+      setTimeout(()=>{o.stop();ctx.close();}, 250);
+    }catch(e){}
+  }
+  function notify(s){ console.log(s); }
+
+  function subscribeState(){
+    if(unsubDoc) unsubDoc();
+    unsubDoc = docRef().onSnapshot(snap=>{
+      if(snap.exists) pinta(snap.data());
+    });
+    // Cargar y pintar horarios
+    prefsRef().get().then(p=>{
+      const data = p.data()||{};
+      document.getElementById('t-am').textContent = data.am||'07:30';
+      document.getElementById('t-walk').textContent = data.walk||'19:00';
+      document.getElementById('t-pm').textContent = data.pm||'20:30';
+      document.getElementById('in-am').value = data.am||'07:30';
+      document.getElementById('in-walk').value = data.walk||'19:00';
+      document.getElementById('in-pm').value = data.pm||'20:30';
+    });
+  }
+
+  function subscribeFeed(){
+    if(unsubFeed) unsubFeed();
+    unsubFeed = feedRef().orderBy('ts','desc').limit(10).onSnapshot(qs=>{
+      const ul = document.getElementById('feed');
+      ul.innerHTML = '';
+      qs.forEach(d=>{
+        const li = document.createElement('li');
+        const {user, action, ts} = d.data();
+        const t = ts?.toDate ? ts.toDate().toLocaleTimeString() : '';
+        li.textContent = `${t} — ${user}: ${action}`;
+        ul.appendChild(li);
+      });
+    });
+  }
+
+  async function logAction(text){
+    await feedRef().add({user:username, action:text, ts: firebase.firestore.FieldValue.serverTimestamp()});
+  }
+
+  async function done(k){
+    if(!home) return;
+    await docRef().set({[k]: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+    beep(); notify(`✅ ${OBJTXT[k]} marcada como hecha`);
+    logAction(`Marcó "${OBJTXT[k]}" hecho`);
+  }
+
+  function posponer(k){
+    const mins = (k==='walk')?30:10;
+    notify(`⏳ ${OBJTXT[k]} pospuesta ${mins} min`);
+    setTimeout(()=>alerta(k), mins*60*1000);
+  }
+
+  function alerta(k){
+    docRef().get().then(s=>{
+      const d=s.data(); if(!d) return;
+      if(d[k]) return; // ya hecho
+      beep(); alert(`🔔 ${OBJTXT[k]} — ¡hora de hacerlo!`);
+    });
+  }
+
+  function playTimer(){
+    alert('🎮 Iniciaste juego de 15 min');
+    setTimeout(()=>{ beep(); alert('⏰ ¡Listo! 15 min de juego'); done('play'); }, 15*60*1000);
+  }
+
+  async function guardarHorarios(){
+    const am = document.getElementById('in-am').value || '07:30';
+    const walk = document.getElementById('in-walk').value || '19:00';
+    const pm = document.getElementById('in-pm').value || '20:30';
+    await prefsRef().set({am,walk,pm}, {merge:true});
+    document.getElementById('t-am').textContent = am;
+    document.getElementById('t-walk').textContent = walk;
+    document.getElementById('t-pm').textContent = pm;
+    msg('log','Horarios guardados'); setTimeout(()=>msg('log',''),2000);
+    logAction(`Actualizó horarios: AM ${am}, Paseo ${walk}, PM ${pm}`);
+    // Programa alertas locales del navegador para HOY
+    programarAlertas({am,walk,pm});
+  }
+
+  function horaHoy(hhmm){
+    const [h,m] = (hhmm||'00:00').split(':').map(Number);
+    const d = new Date(); d.setHours(h,m,0,0); return d;
+  }
+  function programarAlertas(h){
+    const cfg = h || {
+      am: document.getElementById('t-am').textContent || '07:30',
+      walk: document.getElementById('t-walk').textContent || '19:00',
+      pm: document.getElementById('t-pm').textContent || '20:30'
+    };
+    ['am','walk','pm'].forEach(k=>{
+      const t = horaHoy(cfg[k]); const ms = t - Date.now();
+      if(ms>0) setTimeout(()=>alerta(k), ms);
+    });
+  }
+
+  async function reiniciarDia(){
+    await docRef().set({am:false, walk:false, play:false, pm:false, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+    logAction('Reinició el día');
+  }
+
+  // arranque
+  document.getElementById('t-am').textContent = '08:10';
+  document.getElementById('t-walk').textContent = '15:00';
+  document.getElementById('t-pm').textContent = '21:30';
+  </script>
+<script>
+
+// deja ÚNICAMENTE esta versión
+function hoyISO(){
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+let hoyStr = hoyISO();
+document.getElementById('hoy').textContent = new Date().toLocaleDateString();
+
+</script>
+
+<script>
+function docRef(){
+  return db.collection('andonHomes').doc(home).collection('days').doc(hoyStr);
+}
+function prefsRef(){
+  return db.collection('andonHomes').doc(home).collection('meta').doc('prefs');
+}
+function feedRef(){
+  return db.collection('andonHomes').doc(home).collection('feed');
+}
+</script>
+
+<script>
+function waitAuthReady(timeoutMs=5000){
+  return new Promise((resolve, reject)=>{
+    const start = Date.now();
+    (function check(){
+      if(firebase.auth().currentUser){ return resolve(); }
+      if(Date.now()-start>timeoutMs){ return reject(new Error('Auth no disponible')); }
+      setTimeout(check, 100);
+    })();
+  });
+}
+
+async function ensureDoc(){
+  try{
+    await waitAuthReady();
+    const d = await docRef().get();
+    if(!d.exists){
+      await docRef().set({
+        am:false, walk:false, play:false, pm:false,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    const p = await prefsRef().get();
+    if(!p.exists){
+      await prefsRef().set({am:'07:30', walk:'19:00', pm:'20:30'});
+    }
+  }catch(e){
+    alert('Error creando documentos iniciales: '+e.message);
+    console.error(e);
+  }
+}
+</script>
+
+<script>
+async function guardarHorarios(){
+  try{
+    await waitAuthReady();
+    const am = document.getElementById('in-am').value || '07:30';
+    const walk = document.getElementById('in-walk').value || '19:00';
+    const pm = document.getElementById('in-pm').value || '20:30';
+    await prefsRef().set({am,walk,pm}, {merge:true});
+    document.getElementById('t-am').textContent = am;
+    document.getElementById('t-walk').textContent = walk;
+    document.getElementById('t-pm').textContent = pm;
+    alert('Horarios guardados en la nube ✅');
+    logAction(`Actualizó horarios: AM ${am}, Paseo ${walk}, PM ${pm}`);
+  }catch(e){
+    alert('Error guardando horarios: '+e.message);
+    console.error(e);
+  }
+}
+
+async function done(k){
+  if(!home){ alert('Falta código de hogar'); return; }
+  try{
+    await waitAuthReady();
+    await docRef().set({[k]: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+    logAction(`Marcó "${OBJTXT[k]}" hecho`);
+  }catch(e){
+    alert('Error guardando en Firestore: '+e.message);
+    console.error(e);
+  }
+}
+</script>
+
+
+</body>
+</html>
