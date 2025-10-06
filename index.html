@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Andon Perritas – Multiusuario</title>
+<title>Andon Perritas</title>
 <style>
   body{font-family:system-ui,Arial,sans-serif;margin:24px;max-width:720px}
   h1{margin:0 0 6px}
@@ -17,7 +17,8 @@
   small{color:#666}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 </style>
-  <link rel="manifest" href="manifest.json" />
+
+<link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#1967d2" />
 <script>
 if ('serviceWorker' in navigator) {
@@ -25,8 +26,8 @@ if ('serviceWorker' in navigator) {
     .then(()=>console.log('SW listo'));
 }
 </script>
-
 </head>
+
 <body>
   <h1>Andon Perritas</h1>
   <p><small>Hoy: <span id="hoy"></span></small></p>
@@ -108,73 +109,50 @@ if ('serviceWorker' in navigator) {
     </div>
   </div>
 
-  <!-- Firebase SDKs (compat para simplicidad) -->
+  <!-- Firebase SDKs (compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-messaging-compat.js"></script>
 
   <script>
-
-  // 1) Pega tu configuración de Firebase aquí ↓↓↓
- const firebaseConfig = {
-  apiKey: "AIzaSyDSLfHxH1FaNEDOb9l-gb2Ocches1VG6fA",
-  authDomain: "perritas-andon.firebaseapp.com",
-  projectId: "perritas-andon",
-  storageBucket: "perritas-andon.firebasestorage.app",
-  messagingSenderId: "202024461735",
-  appId: "1:202024461735:web:8342da996a90bf2850c282",
-  measurementId: "G-8L9B0HQLVW"
-};
-  // ↑↑↑ Reemplaza con el objeto de configuración de tu proyecto
-
-  // Inicializar
+  // --- Configuración Firebase ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyDSLfHxH1FaNEDOb9l-gb2Ocches1VG6fA",
+    authDomain: "perritas-andon.firebaseapp.com",
+    projectId: "perritas-andon",
+    storageBucket: "perritas-andon.firebasestorage.app",
+    messagingSenderId: "202024461735",
+    appId: "1:202024461735:web:8342da996a90bf2850c282",
+    measurementId: "G-8L9B0HQLVW"
+  };
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
 
-  // Estado local
+  // --- Fecha ISO (DEFINIDA ANTES DE USAR docRef) ---
+  function hoyISO(){
+    const d = new Date();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
+  window.hoyStr = hoyISO();                                      // <- global
+  document.getElementById('hoy').textContent = new Date().toLocaleDateString();
+
+  // --- Estado local ---
   const OBJTXT = {am:'Comida AM', walk:'Paseo', play:'Juego 15 min', pm:'Comida PM'};
+  let uid = null, home = null, username = null;
+  let unsubDoc = null, unsubFeed = null;
 
-  let uid = null;
-  let home = null;
-  let username = null;
-  let unsubDoc = null;
-  let unsubFeed = null;
-
-  // Autenticación anónima
+  // --- Auth anónima ---
   auth.signInAnonymously()
-  .then(()=>console.log('Auth OK'))
-  .catch(e => { console.error(e); alert('Error de autenticación: '+e.message); });
+    .then(()=>console.log('Auth OK'))
+    .catch(e => { console.error(e); alert('Error de autenticación: '+e.message); });
 
-
-  // UI join
-  document.getElementById('btnJoin').onclick = async ()=>{
-    home = document.getElementById('homeId').value.trim();
-    username = document.getElementById('username').value.trim();
-    if(!home || !username){ msg('joinMsg','Completa hogar y nombre'); return; }
-    localStorage.setItem('andon_home', home);
-    localStorage.setItem('andon_user', username);
-    document.getElementById('app').style.display = 'block';
-    document.getElementById('joinMsg').textContent = `Conectado al hogar: ${home}`;
-    await ensureDoc();
-    subscribeState();
-    subscribeFeed();
-  };
-
-  // Cargar si ya había datos
-  window.addEventListener('load', ()=>{
-    const h = localStorage.getItem('andon_home');
-    const u = localStorage.getItem('andon_user');
-    if(h && u){
-      document.getElementById('homeId').value = h;
-      document.getElementById('username').value = u;
-    }
-  });
-
-  // Documento por hogar y día
+  // --- Refs Firestore (una sola vez) ---
   function docRef(){
-    return db.collection('andonHomes').doc(home).collection('days').doc(hoyStr);
+    return db.collection('andonHomes').doc(home).collection('days').doc(window.hoyStr);
   }
   function prefsRef(){
     return db.collection('andonHomes').doc(home).collection('meta').doc('prefs');
@@ -183,17 +161,35 @@ if ('serviceWorker' in navigator) {
     return db.collection('andonHomes').doc(home).collection('feed');
   }
 
+  // --- Utilidades ---
+  function waitAuthReady(timeoutMs=5000){
+    return new Promise((resolve, reject)=>{
+      const start = Date.now();
+      (function check(){
+        if(firebase.auth().currentUser){ return resolve(); }
+        if(Date.now()-start>timeoutMs){ return reject(new Error('Auth no disponible')); }
+        setTimeout(check, 100);
+      })();
+    });
+  }
+
   async function ensureDoc(){
-    const d = await docRef().get();
-    if(!d.exists){
-      await docRef().set({
-        am:false, walk:false, play:false, pm:false,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-    const p = await prefsRef().get();
-    if(!p.exists){
-      await prefsRef().set({am:'07:30', walk:'19:00', pm:'20:30'});
+    try{
+      await waitAuthReady();
+      const d = await docRef().get();
+      if(!d.exists){
+        await docRef().set({
+          am:false, walk:false, play:false, pm:false,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      const p = await prefsRef().get();
+      if(!p.exists){
+        await prefsRef().set({am:'07:30', walk:'19:00', pm:'20:30'});
+      }
+    }catch(e){
+      alert('Error creando documentos iniciales: '+e.message);
+      console.error(e);
     }
   }
 
@@ -208,7 +204,6 @@ if ('serviceWorker' in navigator) {
     el.className = 'pill ' + (done?'ok':'pending');
     el.textContent = done?'Hecho':'Pendiente';
   }
-
   function msg(id, t){ document.getElementById(id).textContent = t; }
   function beep(){
     try{
@@ -258,10 +253,16 @@ if ('serviceWorker' in navigator) {
   }
 
   async function done(k){
-    if(!home) return;
-    await docRef().set({[k]: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
-    beep(); notify(`✅ ${OBJTXT[k]} marcada como hecha`);
-    logAction(`Marcó "${OBJTXT[k]}" hecho`);
+    if(!home){ alert('Falta código de hogar'); return; }
+    try{
+      await waitAuthReady();
+      await docRef().set({[k]: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+      beep(); notify(`✅ ${OBJTXT[k]} marcada como hecha`);
+      logAction(`Marcó "${OBJTXT[k]}" hecho`);
+    }catch(e){
+      alert('Error guardando en Firestore: '+e.message);
+      console.error(e);
+    }
   }
 
   function posponer(k){
@@ -273,7 +274,7 @@ if ('serviceWorker' in navigator) {
   function alerta(k){
     docRef().get().then(s=>{
       const d=s.data(); if(!d) return;
-      if(d[k]) return; // ya hecho
+      if(d[k]) return;
       beep(); alert(`🔔 ${OBJTXT[k]} — ¡hora de hacerlo!`);
     });
   }
@@ -284,17 +285,22 @@ if ('serviceWorker' in navigator) {
   }
 
   async function guardarHorarios(){
-    const am = document.getElementById('in-am').value || '07:30';
-    const walk = document.getElementById('in-walk').value || '19:00';
-    const pm = document.getElementById('in-pm').value || '20:30';
-    await prefsRef().set({am,walk,pm}, {merge:true});
-    document.getElementById('t-am').textContent = am;
-    document.getElementById('t-walk').textContent = walk;
-    document.getElementById('t-pm').textContent = pm;
-    msg('log','Horarios guardados'); setTimeout(()=>msg('log',''),2000);
-    logAction(`Actualizó horarios: AM ${am}, Paseo ${walk}, PM ${pm}`);
-    // Programa alertas locales del navegador para HOY
-    programarAlertas({am,walk,pm});
+    try{
+      await waitAuthReady();
+      const am = document.getElementById('in-am').value || '07:30';
+      const walk = document.getElementById('in-walk').value || '19:00';
+      const pm = document.getElementById('in-pm').value || '20:30';
+      await prefsRef().set({am,walk,pm}, {merge:true});
+      document.getElementById('t-am').textContent = am;
+      document.getElementById('t-walk').textContent = walk;
+      document.getElementById('t-pm').textContent = pm;
+      msg('log','Horarios guardados'); setTimeout(()=>msg('log',''),2000);
+      logAction(`Actualizó horarios: AM ${am}, Paseo ${walk}, PM ${pm}`);
+      programarAlertas({am,walk,pm});
+    }catch(e){
+      alert('Error guardando horarios: '+e.message);
+      console.error(e);
+    }
   }
 
   function horaHoy(hhmm){
@@ -318,162 +324,85 @@ if ('serviceWorker' in navigator) {
     logAction('Reinició el día');
   }
 
-  // arranque
-  document.getElementById('t-am').textContent = '08:10';
-  document.getElementById('t-walk').textContent = '15:00';
-  document.getElementById('t-pm').textContent = '21:30';
-  </script>
-<script>
-
-// deja ÚNICAMENTE esta versión
-function hoyISO(){
-  const d = new Date();
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-let hoyStr = hoyISO();
-document.getElementById('hoy').textContent = new Date().toLocaleDateString();
-
   // ----- AUTO-RESET A MEDIANOCHE -----
-function scheduleMidnightReset(){
-  const now = new Date();
-  const next = new Date(now);
-  // próximo día 00:00:05 (5s de tolerancia)
-  next.setHours(24, 0, 5, 0);
-  const ms = next - now;
-  setTimeout(() => { switchToNewDay(); scheduleMidnightReset(); }, ms);
-}
-
-async function switchToNewDay(){
-  // Si cambió el día, pasamos a un doc nuevo
-  const today = hoyISO();
-  if (today !== hoyStr) {
-    hoyStr = today;
-    if (unsubDoc) unsubDoc();          // corta listener viejo
-    await ensureDoc();                  // crea doc del día si no existe
-    subscribeState();                   // se vuelve a suscribir al nuevo doc
-    programarAlertas();                 // reprograma alertas del día
-    console.log('Día cambiado a', hoyStr);
+  function scheduleMidnightReset(){
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(24, 0, 5, 0);                       // 00:00:05
+    const ms = next - now;
+    setTimeout(() => { switchToNewDay(); scheduleMidnightReset(); }, ms);
   }
-}
-
-// Al volver a la pestaña, verifica cambio de día
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) switchToNewDay();
-});
-
-// al cargar
-window.addEventListener('load', scheduleMidnightReset);
-await registerPush();
-
-</script>
-
-<script>
-function docRef(){
-  return db.collection('andonHomes').doc(home).collection('days').doc(hoyStr);
-}
-function prefsRef(){
-  return db.collection('andonHomes').doc(home).collection('meta').doc('prefs');
-}
-function feedRef(){
-  return db.collection('andonHomes').doc(home).collection('feed');
-}
-</script>
-
-<script>
-function waitAuthReady(timeoutMs=5000){
-  return new Promise((resolve, reject)=>{
-    const start = Date.now();
-    (function check(){
-      if(firebase.auth().currentUser){ return resolve(); }
-      if(Date.now()-start>timeoutMs){ return reject(new Error('Auth no disponible')); }
-      setTimeout(check, 100);
-    })();
-  });
-}
-
-async function ensureDoc(){
-  try{
-    await waitAuthReady();
-    const d = await docRef().get();
-    if(!d.exists){
-      await docRef().set({
-        am:false, walk:false, play:false, pm:false,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+  async function switchToNewDay(){
+    const today = hoyISO();
+    if (today !== window.hoyStr) {
+      window.hoyStr = today;
+      if (unsubDoc) unsubDoc();
+      await ensureDoc();
+      subscribeState();
+      programarAlertas();
+      console.log('Día cambiado a', window.hoyStr);
     }
-    const p = await prefsRef().get();
-    if(!p.exists){
-      await prefsRef().set({am:'07:30', walk:'19:00', pm:'20:30'});
-    }
-  }catch(e){
-    alert('Error creando documentos iniciales: '+e.message);
-    console.error(e);
   }
-}
-</script>
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) switchToNewDay(); });
+  window.addEventListener('load', scheduleMidnightReset);
 
-<script>
-async function guardarHorarios(){
-  try{
-    await waitAuthReady();
-    const am = document.getElementById('in-am').value || '07:30';
-    const walk = document.getElementById('in-walk').value || '19:00';
-    const pm = document.getElementById('in-pm').value || '20:30';
-    await prefsRef().set({am,walk,pm}, {merge:true});
-    document.getElementById('t-am').textContent = am;
-    document.getElementById('t-walk').textContent = walk;
-    document.getElementById('t-pm').textContent = pm;
-    alert('Horarios guardados en la nube ✅');
-    logAction(`Actualizó horarios: AM ${am}, Paseo ${walk}, PM ${pm}`);
-  }catch(e){
-    alert('Error guardando horarios: '+e.message);
-    console.error(e);
-  }
-}
+  // --- Registrar push SOLO tras Entrar ---
+  async function registerPush(){
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+    let perm = Notification.permission;
+    if (perm !== 'granted') perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
 
-async function done(k){
-  if(!home){ alert('Falta código de hogar'); return; }
-  try{
-    await waitAuthReady();
-    await docRef().set({[k]: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
-    logAction(`Marcó "${OBJTXT[k]}" hecho`);
-  }catch(e){
-    alert('Error guardando en Firestore: '+e.message);
-    console.error(e);
-  }
-}
-</script>
-  
-<script>
-let messaging;
-if ('Notification' in window) {
-  messaging = firebase.messaging();
-  navigator.serviceWorker.ready.then(async (reg) => {
-    try {
+    const reg = await navigator.serviceWorker.ready;
+    const messaging = firebase.messaging();
+    try{
       const token = await messaging.getToken({
         vapidKey: 'BPbzJpP4hobfko8Pv5y9Duho8U6a_Diq-O4j-UGx_9qR_JNU7VlJW5n63Ixo-5ceS_wpmKv953F_OmMSMQvsFcM',
         serviceWorkerRegistration: reg
       });
       if (token && home && username) {
-        // guarda token por hogar/usuario
         await db.collection('andonHomes').doc(home)
           .collection('meta').doc('tokens')
           .collection('all').doc(token)
           .set({ user: username, ts: firebase.firestore.FieldValue.serverTimestamp() });
         console.log('FCM token ok');
       }
-    } catch (e) {
-      console.log('Error FCM token', e);
+    }catch(e){ console.log('Error FCM token', e); }
+  }
+
+  // --- Prefill localStorage al cargar ---
+  window.addEventListener('load', ()=>{
+    const h = localStorage.getItem('andon_home');
+    const u = localStorage.getItem('andon_user');
+    if(h && u){
+      document.getElementById('homeId').value = h;
+      document.getElementById('username').value = u;
     }
   });
-}
-</script>
 
+  // --- Handler Entrar (con registerPush al final) ---
+  document.getElementById('btnJoin').onclick = async ()=>{
+    home = document.getElementById('homeId').value.trim();
+    username = document.getElementById('username').value.trim();
+    if(!home || !username){ msg('joinMsg','Completa hogar y nombre'); return; }
+    localStorage.setItem('andon_home', home);
+    localStorage.setItem('andon_user', username);
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('joinMsg').textContent = `Conectado al hogar: ${home}`;
+    await ensureDoc();
+    subscribeState();
+    subscribeFeed();
+    await registerPush();     // << aquí sí
+  };
 
+  // Valores por defecto visibles al cargar
+  document.getElementById('t-am').textContent = '08:10';
+  document.getElementById('t-walk').textContent = '15:00';
+  document.getElementById('t-pm').textContent = '21:30';
+  </script>
 </body>
 </html>
+
 
 
 
