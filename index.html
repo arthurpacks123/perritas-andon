@@ -370,6 +370,8 @@ if ('serviceWorker' in navigator) {
     }catch(e){ console.log('Error FCM token', e); }
   }
 
+  
+
   // Prefill localStorage
   window.addEventListener('load', ()=>{
     const h = localStorage.getItem('andon_home');
@@ -399,6 +401,37 @@ if ('serviceWorker' in navigator) {
   document.getElementById('t-am').textContent = '08:10';
   document.getElementById('t-walk').textContent = '15:00';
   document.getElementById('t-pm').textContent = '21:30';
+    
+    <script>
+// Mostrar notificación cuando el mensaje llega con la página abierta/enfocada
+if ('Notification' in window && 'serviceWorker' in navigator) {
+  const msg = firebase.messaging();
+  navigator.serviceWorker.ready.then((reg)=>{
+    msg.onMessage((payload)=>{
+      console.log('[page] onMessage', payload);
+
+      const title = (payload.notification && payload.notification.title)
+                 || (payload.data && payload.data.title)
+                 || 'Andon Perritas';
+      const body  = (payload.notification && payload.notification.body)
+                 || (payload.data && payload.data.body)
+                 || '';
+      // Personaliza la "tag" por tipo de evento para evitar duplicados
+      const k     = (payload.data && payload.data.k) || 'gen';
+      reg.showNotification(title, {
+        body,
+        icon: './icons/icon-192.png',
+        badge: './icons/icon-192.png',
+        vibrate: [200,100,200],
+        tag: 'andon-' + k,   // p.ej. andon-am / andon-walk / andon-pm
+        renotify: true
+      });
+    });
+  });
+}
+</script>
+
   </script>
 </body>
 </html>
+
